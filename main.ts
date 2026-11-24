@@ -17,16 +17,35 @@
 // Run it the way the grader does:
 //   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
 const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// A TikTok video address is the whole entry: refuse a placeholder or a
+// short link before anything is copied, so a bad VIDEO.json fails loudly
+// here instead of silently handing the gate an address it refuses.
+const VIDEO_URL = /^https:\/\/www\.tiktok\.com\/@[^/]+\/video\/\d+$/;
+
 mkdirSync(OUTPUT_DIR, { recursive: true });
 try {
+  const raw = readFileSync(join(BOT_DIR, 'VIDEO.json'), 'utf-8');
+  const parsed: unknown = JSON.parse(raw);
+  const url =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>).url
+      : undefined;
+  if (typeof url !== 'string' || !VIDEO_URL.test(url)) {
+    console.error(
+      `VIDEO.json does not name a TikTok video address (https://www.tiktok.com/@<handle>/video/<id>): ${String(url)}`,
+    );
+    process.exit(1);
+  }
   copyFileSync(join(BOT_DIR, 'VIDEO.json'), join(OUTPUT_DIR, 'VIDEO.json'));
 } catch (err) {
-  console.error(`VIDEO.json could not be copied from ${BOT_DIR}: ${(err as Error).message}`);
+  console.error(
+    `VIDEO.json could not be read or copied from ${BOT_DIR}: ${(err as Error).message}`,
+  );
   process.exit(1);
 }
